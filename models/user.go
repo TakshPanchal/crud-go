@@ -3,9 +3,9 @@ package models
 import "database/sql"
 
 type User struct {
-	ID    string
-	Name  string
-	Email string
+	ID    string `json:id`
+	Name  string `json:name`
+	Email string `json:email`
 }
 
 type UserModel struct {
@@ -20,9 +20,16 @@ type UserModel struct {
 
 // }
 
-// func (m *UserModel) Create(u User) (User, error) {
-
-// }
+func (m *UserModel) Insert(u User) (int, error) {
+	stmt := `INSERT INTO users (name, email) 
+			VALUES ($1, $2) RETURNING id;`
+	id := -1
+	err := m.DB.QueryRow(stmt, u.Name, u.Email).Scan(&id)
+	if err != nil {
+		return -1, err
+	}
+	return id, nil
+}
 
 // func (m *UserModel) I(id int) (User, error) {
 // }

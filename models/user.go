@@ -13,14 +13,18 @@ type User struct {
 }
 
 type UserModel struct {
-	DB *sql.DB
+	db *sql.DB
+}
+
+func NewUserModel(db *sql.DB) *UserModel {
+	return &UserModel{db: db}
 }
 
 func (m *UserModel) Get(id int) (*User, error) {
 	stmt := `SELECT id, name, email FROM users 
 			WHERE id=$1`
 	var user User
-	err := m.DB.QueryRow(stmt, id).Scan(&user.ID, &user.Name, &user.Email)
+	err := m.db.QueryRow(stmt, id).Scan(&user.ID, &user.Name, &user.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +34,7 @@ func (m *UserModel) Get(id int) (*User, error) {
 func (m *UserModel) Delete(id int) error {
 	stmt := `DELETE FROM users
 			WHERE id=$1;`
-	_, err := m.DB.Exec(stmt, id)
+	_, err := m.db.Exec(stmt, id)
 	if err != nil {
 		return err
 	}
@@ -41,7 +45,7 @@ func (m *UserModel) Insert(u *User) (int, error) {
 	stmt := `INSERT INTO users (name, email) 
 			VALUES ($1, $2) RETURNING id;`
 	id := -1
-	err := m.DB.QueryRow(stmt, u.Name, u.Email).Scan(&id)
+	err := m.db.QueryRow(stmt, u.Name, u.Email).Scan(&id)
 	if err != nil {
 		return -1, err
 	}
@@ -69,7 +73,7 @@ func (m *UserModel) UpdateFields(id int, updatedUser *User) error {
 	stmt = stmt[:len(stmt)-2] // Remove the trailing comma and space
 	stmt += " WHERE id = $1"
 
-	_, err := m.DB.Exec(stmt, args...)
+	_, err := m.db.Exec(stmt, args...)
 
 	return err
 }

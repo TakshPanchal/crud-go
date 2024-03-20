@@ -22,7 +22,7 @@ func main() {
 
 	// Setup Loggers
 	infoLogger := log.New(os.Stdin, "INFO: ", log.Ldate|log.Ltime)
-	errLogger := log.New(os.Stdin, "INFO: ", log.Ldate|log.Ltime|log.Llongfile)
+	errLogger := log.New(os.Stdin, "ERROR: ", log.Ldate|log.Ltime|log.Llongfile)
 
 	port := os.Getenv("PORT")
 
@@ -34,8 +34,8 @@ func main() {
 
 	//handlers
 	mux := http.NewServeMux()
-	userModel := &models.UserModel{DB: db}
-	userHandler := &handlers.UserHandler{InfoLogger: infoLogger, ErrLogger: errLogger, Model: userModel}
+	userModel := models.NewUserModel(db)
+	userHandler := handlers.NewUserHandlers(infoLogger, errLogger, userModel)
 
 	mux.HandleFunc("/user/create", userHandler.CreateUser)
 	mux.HandleFunc("/user/", userHandler.User)

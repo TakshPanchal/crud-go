@@ -2,44 +2,63 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/lib/pq"
 	"github.com/takshpanchal/crud-go/models"
 )
 
 type UserHandler struct {
-	InfoLogger *log.Logger
-	ErrLogger  *log.Logger
-	Model      *models.UserModel
+	iLog  *log.Logger
+	eLog  *log.Logger
+	model *models.UserModel
+}
+
+func NewUserHandlers(infoLogger, errLogger *log.Logger, userModel *models.UserModel) *UserHandler {
+	return &UserHandler{infoLogger, errLogger, userModel}
 }
 
 // CreateUser is handler for Endpoint to create a new user
 func (uh *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// only accept POST request
-	var u models.User
-	err := json.NewDecoder(r.Body).Decode(&u)
-
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	if r.Method != http.MethodPost {
+		methodNotSupported(w, []string{http.MethodPost})
+		return
 	}
 
-	uh.InfoLogger.Printf("User %+v", u)
-	id, err := uh.Model.Insert(&u)
+	var u models.User
+	err := decodeJSONBody(w, r, u)
 	if err != nil {
-		uh.ErrLogger.Println(err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		var m *malformedRequest
+		if errors.As(err, m) {
+			clientError(w, m.msg, m.status)
+
+		} else {
+			serverError(w, uh.eLog, err)
+		}
+		return
+	}
+
+	id, err := uh.model.Insert(&u)
+	if err != nil {
+		uh.eLog.Printf("%s \n %T", err.Error(), err)
+		// serverError(w, uh.ErrLogger, err)
+		var pErr *pq.Error
+		if errors.As(err, &pErr) {
+			switch pErr.Code.Name() {
+			case "unique_violation", "foreign_key_violation":
+				clientError(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+			}
+		}
 		return
 	}
 
 	data := map[string]int{"id": id}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(data)
+	sendJSON(w, data)
 }
 
 func (u *UserHandler) User(w http.ResponseWriter, r *http.Request) {
@@ -56,38 +75,33 @@ func (u *UserHandler) User(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPatch:
 		u.UpdateUserFields(w, r, uid)
 	default:
-		//TODO: send Method not allowed response
+		methodNotSupported(w, []string{http.MethodGet, http.MethodPatch, http.MethodDelete})
 	}
 }
 
 // GetUser is handler for Endpoint to get user by id
 func (uh *UserHandler) GetUser(w http.ResponseWriter, r *http.Request, uid int) {
-	// only accept GET user
-	user, err := uh.Model.Get(uid)
+	user, err := uh.model.Get(uid)
 
 	if err != nil {
-		uh.ErrLogger.Println(err)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 		} else {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			serverError(w, uh.eLog, err)
 		}
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(user)
+	sendJSON(w, user)
 }
 
 func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request, uid int) {
-	// only accept DELTE user
-	err := h.Model.Delete(uid)
+	err := h.model.Delete(uid)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 		} else {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			serverError(w, h.eLog, err)
 		}
 		return
 	}
@@ -96,21 +110,23 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request, uid int
 }
 
 func (h *UserHandler) UpdateUserFields(w http.ResponseWriter, r *http.Request, uid int) {
-	// only accept PATCH user
-
 	u := models.User{ID: uid}
-	err := json.NewDecoder(r.Body).Decode(&u)
-
+	err := decodeJSONBody(w, r, u)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		var m *malformedRequest
+		if errors.As(err, m) {
+			clientError(w, m.msg, m.status)
+
+		} else {
+			serverError(w, h.eLog, err)
+		}
+		return
 	}
 
-	h.InfoLogger.Printf("User %+v", u)
-	err = h.Model.UpdateFields(uid, &u)
+	err = h.model.UpdateFields(uid, &u)
 
 	if err != nil {
-		h.ErrLogger.Println(err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		serverError(w, h.eLog, err)
 		return
 	}
 	h.GetUser(w, r, uid)

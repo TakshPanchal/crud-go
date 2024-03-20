@@ -38,9 +38,7 @@ func main() {
 	userHandler := &handlers.UserHandler{InfoLogger: infoLogger, ErrLogger: errLogger, Model: userModel}
 
 	mux.HandleFunc("/user/create", userHandler.CreateUser)
-	mux.HandleFunc("/user/delete", userHandler.DeleteUser)
-	// mux.HandleFunc("/user/update", userHandler.CreateUser)
-	mux.HandleFunc("/user/", userHandler.GetUser)
+	mux.HandleFunc("/user/", userHandler.User)
 
 	infoLogger.Printf("Starting server at port %s", port)
 	srv := &http.Server{Addr: port, Handler: mux, ErrorLog: errLogger}
